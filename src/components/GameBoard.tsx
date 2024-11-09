@@ -236,36 +236,29 @@ export default function GameBoard() {
   };
 
   const isPieceInCorrectArea = (piece: PuzzlePieceType) => {
-    // Make the threshold much more lenient - allowing for bigger gaps
-    const FINISH_THRESHOLD = pieceSize * 0.8; // 80% of piece size tolerance
+    const isMobile = window.innerWidth < MOBILE_BREAKPOINT;
+    const FINISH_THRESHOLD = pieceSize * 0.9;
     
-    const correctCol = Math.floor(piece.correctPosition.x / pieceSize);
-    const correctRow = Math.floor(piece.correctPosition.y / pieceSize);
+    const isNearCorrectPosition = 
+      Math.abs(piece.position.x - piece.correctPosition.x) < FINISH_THRESHOLD &&
+      Math.abs(piece.position.y - piece.correctPosition.y) < FINISH_THRESHOLD;
+
+    const rotationThreshold = isMobile ? 60 : 45; // degrees
+    const isRotationClose = Math.abs(((piece.rotation % 360) + 360) % 360) < rotationThreshold;
     
-    const pieceX = piece.position.x;
-    const pieceY = piece.position.y;
-    
-    // Check if piece is roughly in the right area
-    const isNearCorrectX = Math.abs(pieceX - piece.correctPosition.x) < FINISH_THRESHOLD;
-    const isNearCorrectY = Math.abs(pieceY - piece.correctPosition.y) < FINISH_THRESHOLD;
-    
-    return isNearCorrectX && isNearCorrectY;
+    return isNearCorrectPosition && isRotationClose;
   };
 
   const handleFinish = () => {
     const allPiecesInPlace = pieces.every(piece => isPieceInCorrectArea(piece));
     
     if (allPiecesInPlace) {
-      // Snap all pieces to their exact positions
       setPieces(prev => prev.map(piece => ({
         ...piece,
         position: piece.correctPosition,
         rotation: piece.correctRotation
       })));
       
-      // New scoring system:
-      // Base score: 3 points for completing the puzzle
-      // Bonus: +1 point for each hint remaining
       const baseScore = 3;
       const hintBonus = gameState.hintsRemaining;
       const finalScore = baseScore + hintBonus;
@@ -279,7 +272,6 @@ export default function GameBoard() {
       setShowCelebration(true);
       triggerCelebration();
     } else {
-      // Show a more helpful message
       alert("Some pieces aren't in their correct positions. Try arranging them according to the preview image!");
     }
   };
@@ -299,14 +291,12 @@ export default function GameBoard() {
   };
 
   const triggerCelebration = () => {
-    // Initial burst
     confetti({
       particleCount: 100,
       spread: 70,
       origin: { y: 0.6 }
     });
 
-    // Side cannons
     setTimeout(() => {
       confetti({
         particleCount: 50,
@@ -322,7 +312,6 @@ export default function GameBoard() {
       });
     }, 250);
 
-    // Delayed bursts
     setTimeout(() => {
       confetti({
         particleCount: 100,
@@ -331,7 +320,6 @@ export default function GameBoard() {
       });
     }, 500);
 
-    // Rain effect
     setTimeout(() => {
       const end = Date.now() + 1000;
       const colors = ['#ff0000', '#ffd700', '#00ff00', '#0000ff', '#ff69b4'];
@@ -433,6 +421,7 @@ export default function GameBoard() {
                 size={pieceSize}
                 boardSize={pieceSize * PUZZLE_SIZE}
                 onClick={() => handlePieceClick(piece.id)}
+                isDraggable={!correctPieces.has(piece.id)}
               />
             ))}
           </div>

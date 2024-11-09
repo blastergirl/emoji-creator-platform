@@ -11,19 +11,22 @@ interface Props {
   isCorrect: boolean;
   boardSize: number;
   onClick?: () => void;
+  isDraggable: boolean;
 }
 
-export default function PuzzlePiece({ piece, onRotate, onDragEnd, isActive, size, isCorrect, boardSize, onClick }: Props) {
+export default function PuzzlePiece({ piece, onRotate, onDragEnd, isActive, size, isCorrect, boardSize, onClick, isDraggable }: Props) {
   const [isDragging, setIsDragging] = useState(false);
 
   return (
     <AnimatePresence>
       <motion.div
-        className={`absolute touch-none cursor-grab ${isCorrect ? 'ring-4 ring-yellow-500 ring-opacity-50' : ''}`}
+        className={`absolute touch-none ${isDraggable ? 'cursor-grab' : 'cursor-default'} 
+          ${isCorrect ? 'ring-4 ring-yellow-500 ring-opacity-50' : ''}`}
         style={{
           width: `${size}px`,
           height: `${size}px`,
           willChange: 'transform',
+          zIndex: isDragging ? 50 : isActive ? 40 : isCorrect ? 10 : 20,
         }}
         initial={{ 
           x: piece.position.x - boardSize / 2,
@@ -36,7 +39,8 @@ export default function PuzzlePiece({ piece, onRotate, onDragEnd, isActive, size
           y: piece.position.y - boardSize / 2,
           rotate: piece.rotation,
           scale: isActive ? 1.05 : 1,
-          opacity: 1
+          opacity: 1,
+          zIndex: isDragging ? 50 : isActive ? 40 : isCorrect ? 10 : 20,
         }}
         transition={{
           type: "spring",
@@ -44,19 +48,23 @@ export default function PuzzlePiece({ piece, onRotate, onDragEnd, isActive, size
           damping: 20,
           opacity: { duration: 0.2 }
         }}
-        drag
+        drag={isDraggable}
         dragMomentum={false}
         dragElastic={0}
-        whileHover={{ 
-          scale: isCorrect ? 1 : 1.05,
-          boxShadow: "0px 5px 15px rgba(0,0,0,0.3)"
-        }}
-        whileDrag={{ 
+        whileHover={isDraggable ? { 
+          scale: 1.05,
+          boxShadow: "0px 5px 15px rgba(0,0,0,0.3)",
+          zIndex: 30
+        } : undefined}
+        whileDrag={isDraggable ? { 
           scale: 1.1,
           zIndex: 50,
           boxShadow: "0px 10px 25px rgba(0,0,0,0.4)"
+        } : undefined}
+        onDragStart={() => {
+          setIsDragging(true);
+          onClick?.(); // Select the piece when starting to drag
         }}
-        onDragStart={() => setIsDragging(true)}
         onDragEnd={(_, info) => {
           setIsDragging(false);
           onDragEnd(piece.id, { 
@@ -68,19 +76,27 @@ export default function PuzzlePiece({ piece, onRotate, onDragEnd, isActive, size
       >
         <motion.div 
           className={`w-full h-full rounded-lg shadow-lg overflow-hidden transition-all duration-200
-            ${isCorrect ? 'opacity-100 cursor-default' : 'opacity-90 hover:opacity-100'}`}
-          onClick={() => !isDragging && !isCorrect && onRotate(piece.id)}
-          style={piece.imageStyles}
-          whileHover={!isCorrect && {
-            filter: "brightness(1.2)"
+            ${isCorrect ? 'opacity-100' : 'opacity-90 hover:opacity-100'}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (!isDragging && isDraggable) {
+              onRotate(piece.id);
+            }
           }}
+          style={{
+            ...piece.imageStyles,
+            pointerEvents: isCorrect ? 'none' : 'auto',
+          }}
+          whileHover={!isCorrect ? {
+            filter: "brightness(1.2)"
+          } : undefined}
           animate={isCorrect ? {
             scale: [1, 1.05, 1],
             transition: {
               duration: 0.5,
               times: [0, 0.5, 1]
             }
-          } : {}}
+          } : undefined}
         />
       </motion.div>
     </AnimatePresence>
