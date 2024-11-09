@@ -6,6 +6,7 @@ import { Cat, Clock, Trophy } from 'lucide-react';
 import type { PuzzlePiece as PuzzlePieceType, GameState } from '../types';
 import confetti from 'canvas-confetti';
 import { levels, type LevelConfig } from '../config/levels';
+import '../styles/rainbow.css';
 
 type Difficulty = 'easy' | 'medium' | 'hard';
 
@@ -103,6 +104,34 @@ const LevelSelectModal = React.memo(({
     </motion.div>
   </motion.div>
 ));
+
+// Add this balloon drawing function at the top of the file
+const createBalloonCanvas = (color: string) => {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+
+  canvas.width = 40;
+  canvas.height = 60;
+
+  // Draw balloon
+  ctx.beginPath();
+  ctx.moveTo(20, 55); // string start
+  ctx.quadraticCurveTo(20, 50, 20, 45); // string
+  
+  // Balloon body
+  ctx.beginPath();
+  ctx.moveTo(20, 45);
+  ctx.bezierCurveTo(5, 45, 0, 30, 0, 20);
+  ctx.bezierCurveTo(0, 5, 40, 5, 40, 20);
+  ctx.bezierCurveTo(40, 30, 35, 45, 20, 45);
+  
+  // Fill balloon
+  ctx.fillStyle = color;
+  ctx.fill();
+  
+  return canvas;
+};
 
 export default function GameBoard() {
   const [loadedImages, setLoadedImages] = useState<Set<string>>(new Set());
@@ -250,19 +279,41 @@ export default function GameBoard() {
     const newX = piece.position.x + dragInfo.x;
     const newY = piece.position.y + dragInfo.y;
 
+    const gridCol = Math.round(newX / pieceSize);
+    const gridRow = Math.round(newY / pieceSize);
+    
+    const correctCol = Math.round(piece.correctPosition.x / pieceSize);
+    const correctRow = Math.round(piece.correctPosition.y / pieceSize);
+
+    const SNAP_THRESHOLD = pieceSize * 0.3; // 30% of piece size
+
     const isNearCorrectPosition = 
-      Math.abs(newX - piece.correctPosition.x) < SNAP_THRESHOLD &&
-      Math.abs(newY - piece.correctPosition.y) < SNAP_THRESHOLD;
+      Math.abs(gridCol - correctCol) * pieceSize < SNAP_THRESHOLD &&
+      Math.abs(gridRow - correctRow) * pieceSize < SNAP_THRESHOLD;
 
     setPieces(prev => prev.map(p => {
       if (p.id !== id) return p;
+
+      if (isNearCorrectPosition) {
+        return {
+          ...p,
+          position: { ...p.correctPosition },
+          rotation: p.correctRotation
+        };
+      }
+
       return {
         ...p,
-        position: isNearCorrectPosition
-          ? { ...p.correctPosition }
-          : { x: newX, y: newY }
+        position: {
+          x: gridCol * pieceSize,
+          y: gridRow * pieceSize
+        }
       };
     }));
+
+    if (isNearCorrectPosition) {
+      setCorrectPieces(prev => new Set([...prev, id]));
+    }
 
     checkCompletion();
   };
@@ -329,23 +380,47 @@ export default function GameBoard() {
   };
 
   const isPieceInCorrectArea = (piece: PuzzlePieceType) => {
-    const isMobile = window.innerWidth < MOBILE_BREAKPOINT;
-    const FINISH_THRESHOLD = pieceSize * 0.9;
+    // For 2x2 puzzles (first level), use grid-based checking
+    if (currentLevel.gridSize === 2) {
+      // Get the target grid position
+      const targetGridX = Math.floor(piece.correctPosition.x / pieceSize);
+      const targetGridY = Math.floor(piece.correctPosition.y / pieceSize);
+      
+      // Get the current grid position
+      const currentGridX = Math.floor((piece.position.x + pieceSize / 2) / pieceSize);
+      const currentGridY = Math.floor((piece.position.y + pieceSize / 2) / pieceSize);
+      
+      // Check if the piece is in the correct grid cell
+      const isInCorrectCell = 
+        currentGridX === targetGridX && 
+        currentGridY === targetGridY;
+      
+      // For 2x2, we only care about grid position, not exact position or rotation
+      return isInCorrectCell;
+    }
     
-    const isNearCorrectPosition = 
-      Math.abs(piece.position.x - piece.correctPosition.x) < FINISH_THRESHOLD &&
-      Math.abs(piece.position.y - piece.correctPosition.y) < FINISH_THRESHOLD;
+    // For other levels, use distance-based checking
+    const threshold = currentLevel.gridSize <= 3 ? pieceSize * 0.8 : pieceSize * 0.4;
+    
+    // Calculate distance from correct position
+    const distanceX = Math.abs(piece.position.x - piece.correctPosition.x);
+    const distanceY = Math.abs(piece.position.y - piece.correctPosition.y);
+    
+    const isPositionClose = distanceX < threshold && distanceY < threshold;
+    
+    // Check rotation for non-2x2 puzzles
+    const rotationThreshold = 45; // degrees
+    const currentRotation = ((piece.rotation % 360) + 360) % 360;
+    const isRotationClose = currentRotation < rotationThreshold || 
+                           currentRotation > (360 - rotationThreshold);
 
-    const rotationThreshold = isMobile ? 60 : 45; // degrees
-    const isRotationClose = Math.abs(((piece.rotation % 360) + 360) % 360) < rotationThreshold;
-    
-    return isNearCorrectPosition && isRotationClose;
+    return isPositionClose && isRotationClose;
   };
 
   const handleFinish = () => {
-    const allPiecesInPlace = pieces.every(piece => isPieceInCorrectArea(piece));
+    const unsolvedPieces = pieces.filter(piece => !isPieceInCorrectArea(piece));
     
-    if (allPiecesInPlace) {
+    if (unsolvedPieces.length === 0) {
       setPieces(prev => prev.map(piece => ({
         ...piece,
         position: piece.correctPosition,
@@ -365,7 +440,11 @@ export default function GameBoard() {
       setShowCelebration(true);
       triggerCelebration();
     } else {
-      alert("Some pieces aren't in their correct positions. Try arranging them according to the preview image!");
+      const message = currentLevel.gridSize <= 2 
+        ? "Keep trying! Make sure the pieces are roughly in their correct spots."
+        : `${unsolvedPieces.length} piece${unsolvedPieces.length > 1 ? 's' : ''} still need${unsolvedPieces.length === 1 ? 's' : ''} to be placed correctly.`;
+      
+      alert(message);
     }
   };
 
@@ -383,61 +462,106 @@ export default function GameBoard() {
     setShowControls(false);
   };
 
+  // Update the triggerCelebration function
   const triggerCelebration = () => {
+    const colors = [
+      '#FF69B4', // Pink
+      '#87CEEB', // Sky Blue
+      '#FFD700', // Gold
+      '#98FB98', // Pale Green
+      '#DDA0DD', // Plum
+    ];
+
+    // Launch balloons function
+    const launchBalloons = (side: 'left' | 'right' | 'center') => {
+      confetti({
+        particleCount: side === 'center' ? 30 : 20,
+        angle: side === 'left' ? 60 : side === 'right' ? 120 : 90,
+        spread: side === 'center' ? 80 : 40,
+        origin: { 
+          x: side === 'left' ? 0.1 : side === 'right' ? 0.9 : 0.5, 
+          y: 0.9 
+        },
+        gravity: 0.3,
+        drift: side === 'left' ? 1 : side === 'right' ? -1 : 0,
+        ticks: 400,
+        scalar: 2,
+        shapes: ['circle'],
+        colors: colors
+      });
+    };
+
+    // Initial confetti burst
     confetti({
       particleCount: 100,
       spread: 70,
       origin: { y: 0.6 }
     });
 
+    // Launch balloons in sequence
+    setTimeout(() => launchBalloons('left'), 300);
+    setTimeout(() => launchBalloons('center'), 600);
+    setTimeout(() => launchBalloons('right'), 900);
+
+    // More confetti
     setTimeout(() => {
       confetti({
         particleCount: 50,
         angle: 60,
         spread: 55,
-        origin: { x: 0 }
+        origin: { x: 0 },
+        colors: colors
       });
       confetti({
         particleCount: 50,
         angle: 120,
         spread: 55,
-        origin: { x: 1 }
+        origin: { x: 1 },
+        colors: colors
       });
-    }, 250);
+    }, 1200);
 
+    // Second wave of balloons
     setTimeout(() => {
-      confetti({
-        particleCount: 100,
-        spread: 100,
-        origin: { y: 0.6 }
-      });
-    }, 500);
+      launchBalloons('center');
+      setTimeout(() => launchBalloons('left'), 200);
+      setTimeout(() => launchBalloons('right'), 400);
+    }, 1500);
 
+    // Final celebration
     setTimeout(() => {
-      const end = Date.now() + 1000;
-      const colors = ['#ff0000', '#ffd700', '#00ff00', '#0000ff', '#ff69b4'];
+      const end = Date.now() + 2000;
 
       (function frame() {
         confetti({
-          particleCount: 2,
+          particleCount: 4,
           angle: 60,
           spread: 55,
           origin: { x: 0 },
-          colors: colors
+          colors: colors,
+          shapes: ['circle'],
+          gravity: 0.3,
+          scalar: 2
         });
         confetti({
-          particleCount: 2,
+          particleCount: 4,
           angle: 120,
           spread: 55,
           origin: { x: 1 },
-          colors: colors
+          colors: colors,
+          shapes: ['circle'],
+          gravity: 0.3,
+          scalar: 2
         });
 
         if (Date.now() < end) {
           requestAnimationFrame(frame);
         }
       }());
-    }, 750);
+
+      // Final balloon launch
+      launchBalloons('center');
+    }, 2000);
   };
 
   // Update the handleLevelChange function
@@ -510,12 +634,26 @@ export default function GameBoard() {
     <motion.div 
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="min-h-screen bg-gradient-to-br from-yellow-900/5 to-yellow-600/10 p-2 sm:p-8"
+      className="min-h-screen relative bg-black p-2 sm:p-8 overflow-hidden"
     >
+      <div className="rainbow-background animate-rainbow">
+        {Array.from({ length: 12 }).map((_, i) => (
+          <div
+            key={i}
+            className="rainbow-stripe"
+            style={{
+              top: `${i * 60}px`,
+              backgroundColor: `hsl(${i * 30}, 70%, 50%)`,
+              animationDelay: `${i * 0.1}s`
+            }}
+          />
+        ))}
+      </div>
+
       <motion.div 
         initial={{ y: -20 }}
         animate={{ y: 0 }}
-        className="max-w-4xl mx-auto"
+        className="relative max-w-4xl mx-auto z-10"
       >
         <motion.div 
           initial={{ y: -20 }}

@@ -1,0 +1,27 @@
+.rainbow-background {
+  position: absolute;
+  inset: 0;
+  opacity: 0.1;
+  overflow: hidden;
+}
+
+.rainbow-stripe {
+  position: absolute;
+  width: 200%;
+  height: 40px;
+  transform: rotate(-45deg);
+  left: -50%;
+}
+
+.animate-rainbow {
+  animation: rainbow 10s linear infinite;
+}
+
+@keyframes rainbow {
+  0% {
+    filter: hue-rotate(0deg);
+  }
+  100% {
+    filter: hue-rotate(360deg);
+  }
+} 

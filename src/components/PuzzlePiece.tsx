@@ -23,7 +23,7 @@ export default function PuzzlePiece({ piece, onRotate, onDragEnd, isActive, size
       <motion.div
         className={`absolute touch-none ${isDraggable ? 'cursor-grab' : 'cursor-default'} 
           ${isCorrect ? 'ring-4 ring-yellow-500 ring-opacity-50' : ''}
-          ${isHinted ? 'ring-4 ring-blue-500 ring-opacity-75 animate-pulse' : ''}`}
+          ${isHinted ? 'ring-4 ring-blue-500 ring-opacity-75' : ''}`}
         style={{
           width: `${size}px`,
           height: `${size}px`,
@@ -40,22 +40,15 @@ export default function PuzzlePiece({ piece, onRotate, onDragEnd, isActive, size
           x: piece.position.x - boardSize / 2,
           y: piece.position.y - boardSize / 2,
           rotate: piece.rotation,
-          scale: isHinted ? [1, 1.1, 1] : isActive ? 1.05 : 1,
+          scale: isHinted ? 1.1 : isActive ? 1.05 : 1,
           opacity: 1,
-          zIndex: isDragging ? 50 : isActive ? 40 : isHinted ? 35 : isCorrect ? 10 : 20,
-          boxShadow: isHinted ? [
-            "0px 0px 0px rgba(59, 130, 246, 0)",
-            "0px 0px 20px rgba(59, 130, 246, 0.5)",
-            "0px 0px 0px rgba(59, 130, 246, 0)"
-          ] : undefined,
+          boxShadow: isHinted ? "0px 0px 20px rgba(59, 130, 246, 0.5)" : "none"
         }}
         transition={{
           type: "spring",
           stiffness: 200,
           damping: 20,
-          opacity: { duration: 0.2 },
-          repeat: isHinted ? Infinity : 0,
-          duration: isHinted ? 1.5 : 0.2,
+          opacity: { duration: 0.2 }
         }}
         drag={isDraggable}
         dragMomentum={false}
@@ -72,7 +65,7 @@ export default function PuzzlePiece({ piece, onRotate, onDragEnd, isActive, size
         } : undefined}
         onDragStart={() => {
           setIsDragging(true);
-          onClick?.(); // Select the piece when starting to drag
+          onClick?.();
         }}
         onDragEnd={(_, info) => {
           setIsDragging(false);
@@ -97,16 +90,14 @@ export default function PuzzlePiece({ piece, onRotate, onDragEnd, isActive, size
             ...piece.imageStyles,
             pointerEvents: isCorrect ? 'none' : 'auto',
           }}
-          whileHover={!isCorrect ? {
-            filter: "brightness(1.2)"
+          animate={isHinted ? {
+            scale: [1, 1.1],
           } : undefined}
-          animate={isCorrect ? {
-            scale: [1, 1.05, 1],
-            transition: {
-              duration: 0.5,
-              times: [0, 0.5, 1]
-            }
-          } : undefined}
+          transition={{
+            repeat: isHinted ? Infinity : 0,
+            repeatType: "reverse",
+            duration: 0.5
+          }}
         >
           {isHinted && (
             <div className="absolute inset-0 flex items-center justify-center bg-blue-500/20 backdrop-blur-sm">
