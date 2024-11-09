@@ -10,7 +10,7 @@ export const levels: LevelConfig[] = [
   {
     id: 'sleepy-cat',
     name: 'Sleepy Cat',
-    image: "https://images.unsplash.com/photo-1574158622682-e40e69881006?w=600&h=600&fit=crop&crop=faces,center",
+    image: "https://images.unsplash.com/photo-1533738363-b7f9aef128ce?w=600&h=600&fit=crop&crop=faces,center",
     gridSize: 2,
     difficulty: 'easy'
   },

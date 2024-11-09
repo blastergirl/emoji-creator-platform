@@ -380,71 +380,114 @@ export default function GameBoard() {
   };
 
   const isPieceInCorrectArea = (piece: PuzzlePieceType) => {
-    // For 2x2 puzzles (first level), use grid-based checking
-    if (currentLevel.gridSize === 2) {
-      // Get the target grid position
-      const targetGridX = Math.floor(piece.correctPosition.x / pieceSize);
-      const targetGridY = Math.floor(piece.correctPosition.y / pieceSize);
-      
-      // Get the current grid position
-      const currentGridX = Math.floor((piece.position.x + pieceSize / 2) / pieceSize);
-      const currentGridY = Math.floor((piece.position.y + pieceSize / 2) / pieceSize);
-      
-      // Check if the piece is in the correct grid cell
-      const isInCorrectCell = 
-        currentGridX === targetGridX && 
-        currentGridY === targetGridY;
-      
-      // For 2x2, we only care about grid position, not exact position or rotation
-      return isInCorrectCell;
+    // Special handling for first level only
+    if (currentLevel.id === 'sleepy-cat') {
+      // Super lenient check - just make sure it's in roughly the right half/quarter
+      const correctX = piece.correctPosition.x;
+      const correctY = piece.correctPosition.y;
+      const currentX = piece.position.x;
+      const currentY = piece.position.y;
+
+      // Very large threshold for first level
+      const threshold = pieceSize * 1.5;
+
+      return Math.abs(currentX - correctX) < threshold && 
+             Math.abs(currentY - correctY) < threshold;
     }
     
-    // For other levels, use distance-based checking
+    // For all other levels, use the existing logic
     const threshold = currentLevel.gridSize <= 3 ? pieceSize * 0.8 : pieceSize * 0.4;
     
-    // Calculate distance from correct position
     const distanceX = Math.abs(piece.position.x - piece.correctPosition.x);
     const distanceY = Math.abs(piece.position.y - piece.correctPosition.y);
     
     const isPositionClose = distanceX < threshold && distanceY < threshold;
     
-    // Check rotation for non-2x2 puzzles
     const rotationThreshold = 45; // degrees
     const currentRotation = ((piece.rotation % 360) + 360) % 360;
     const isRotationClose = currentRotation < rotationThreshold || 
                            currentRotation > (360 - rotationThreshold);
 
-    return isPositionClose && isRotationClose;
+    return isPositionClose && (currentLevel.gridSize === 2 || isRotationClose);
   };
 
+  // Update handleFinish for better feedback
   const handleFinish = () => {
-    const unsolvedPieces = pieces.filter(piece => !isPieceInCorrectArea(piece));
-    
-    if (unsolvedPieces.length === 0) {
-      setPieces(prev => prev.map(piece => ({
-        ...piece,
-        position: piece.correctPosition,
-        rotation: piece.correctRotation
-      })));
+    if (currentLevel.gridSize === 2) {
+      const pieceStatuses = pieces.map(getPieceStatus);
+      const correctPieces = pieceStatuses.filter(p => p.isVeryClose);
+      const closePieces = pieceStatuses.filter(p => p.isClose);
       
-      const baseScore = 3;
-      const hintBonus = gameState.hintsRemaining;
-      const finalScore = baseScore + hintBonus;
-      
-      setGameState(prev => ({
-        ...prev,
-        isComplete: true,
-        score: finalScore,
-      }));
-      
-      setShowCelebration(true);
-      triggerCelebration();
+      console.log('Piece statuses:', pieceStatuses);
+      console.log('Correct pieces:', correctPieces.length);
+      console.log('Close pieces:', closePieces.length);
+
+      if (correctPieces.length === pieces.length) {
+        // All pieces are very close to their correct positions
+        setPieces(prev => prev.map(piece => ({
+          ...piece,
+          position: piece.correctPosition,
+          rotation: piece.correctRotation
+        })));
+        
+        const baseScore = 3;
+        const hintBonus = gameState.hintsRemaining;
+        const finalScore = baseScore + hintBonus;
+        
+        setGameState(prev => ({
+          ...prev,
+          isComplete: true,
+          score: finalScore,
+        }));
+        
+        setShowCelebration(true);
+        triggerCelebration();
+      } else {
+        // Provide friendly, specific feedback
+        let message = '';
+        if (correctPieces.length > 0) {
+          message = `Great job! ${correctPieces.length} piece${correctPieces.length === 1 ? ' is' : 's are'} perfectly placed. `;
+          if (closePieces.length > correctPieces.length) {
+            message += `${closePieces.length - correctPieces.length} more ${closePieces.length - correctPieces.length === 1 ? 'is' : 'are'} very close!`;
+          }
+        } else if (closePieces.length > 0) {
+          message = `You're getting there! ${closePieces.length} piece${closePieces.length === 1 ? ' is' : 's are'} close to the right spot.`;
+        } else {
+          message = "Keep going! Try matching the pieces to the preview image in the top right.";
+        }
+        alert(message);
+      }
     } else {
-      const message = currentLevel.gridSize <= 2 
-        ? "Keep trying! Make sure the pieces are roughly in their correct spots."
-        : `${unsolvedPieces.length} piece${unsolvedPieces.length > 1 ? 's' : ''} still need${unsolvedPieces.length === 1 ? 's' : ''} to be placed correctly.`;
+      // For other levels, use the existing logic
+      const unsolvedPieces = pieces.filter(piece => !isPieceInCorrectArea(piece));
       
-      alert(message);
+      if (unsolvedPieces.length === 0) {
+        setPieces(prev => prev.map(piece => ({
+          ...piece,
+          position: piece.correctPosition,
+          rotation: piece.correctRotation
+        })));
+        
+        const baseScore = 3;
+        const hintBonus = gameState.hintsRemaining;
+        const finalScore = baseScore + hintBonus;
+        
+        setGameState(prev => ({
+          ...prev,
+          isComplete: true,
+          score: finalScore,
+        }));
+        
+        setShowCelebration(true);
+        triggerCelebration();
+      } else {
+        // More helpful feedback message
+        const message = currentLevel.gridSize <= 2 
+          ? "Almost there! Just make sure each piece is in its correct corner."
+          : `${unsolvedPieces.length} piece${unsolvedPieces.length > 1 ? 's' : ''} still need${unsolvedPieces.length === 1 ? 's' : ''} to be placed correctly.`;
+        
+        alert(message);
+      }
     }
   };
 
@@ -628,6 +671,56 @@ export default function GameBoard() {
     Promise.all(levels.map(level => loadImage(level.image)))
       .then(() => console.log('All images preloaded'))
       .catch(error => console.error('Error preloading images:', error));
+  };
+
+  // Update the getPieceStatus function to be more lenient for the first level
+  const getPieceStatus = (piece: PuzzlePieceType) => {
+    // Special handling for first level (2x2 puzzle)
+    if (currentLevel.gridSize === 2) {
+      const distanceX = Math.abs(piece.position.x - piece.correctPosition.x);
+      const distanceY = Math.abs(piece.position.y - piece.correctPosition.y);
+      
+      // Much more lenient thresholds for 2x2
+      const isVeryClose = distanceX < pieceSize * 1.2 && distanceY < pieceSize * 1.2;
+      const isClose = distanceX < pieceSize * 1.5 && distanceY < pieceSize * 1.5;
+
+      console.log(`Piece ${piece.id}:`, {
+        distanceX,
+        distanceY,
+        correctX: piece.correctPosition.x,
+        correctY: piece.correctPosition.y,
+        currentX: piece.position.x,
+        currentY: piece.position.y,
+        isVeryClose,
+        isClose
+      });
+      
+      return {
+        id: piece.id,
+        isVeryClose,
+        isClose,
+        distanceX,
+        distanceY,
+        position: piece.position,
+        correctPosition: piece.correctPosition
+      };
+    }
+
+    // Original logic for other levels
+    const distanceX = Math.abs(piece.position.x - piece.correctPosition.x);
+    const distanceY = Math.abs(piece.position.y - piece.correctPosition.y);
+    const isVeryClose = distanceX < pieceSize * 0.5 && distanceY < pieceSize * 0.5;
+    const isClose = distanceX < pieceSize && distanceY < pieceSize;
+    
+    return {
+      id: piece.id,
+      isVeryClose,
+      isClose,
+      distanceX,
+      distanceY,
+      position: piece.position,
+      correctPosition: piece.correctPosition
+    };
   };
 
   return (
