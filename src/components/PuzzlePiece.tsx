@@ -19,10 +19,11 @@ export default function PuzzlePiece({ piece, onRotate, onDragEnd, isActive, size
   return (
     <AnimatePresence>
       <motion.div
-        className={`absolute cursor-grab ${isCorrect ? 'ring-4 ring-yellow-500 ring-opacity-50' : ''}`}
+        className={`absolute touch-none cursor-grab ${isCorrect ? 'ring-4 ring-yellow-500 ring-opacity-50' : ''}`}
         style={{
           width: `${size}px`,
           height: `${size}px`,
+          willChange: 'transform',
         }}
         initial={{ 
           x: piece.position.x - boardSize / 2,

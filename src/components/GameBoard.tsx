@@ -9,110 +9,62 @@ import confetti from 'canvas-confetti';
 type Difficulty = 'easy' | 'medium' | 'hard';
 
 const PUZZLE_SIZE = 3;
-const PIECE_SIZE = 150;
+const MOBILE_BREAKPOINT = 768; // pixels
+const DESKTOP_PIECE_SIZE = 150;
+const MOBILE_PIECE_SIZE = 80; // Smaller pieces for mobile
+const BOARD_HEIGHT_MOBILE = 400; // Smaller board height for mobile
 const SNAP_THRESHOLD = 30;
 
 const CAT_IMAGE = "https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=600&h=600&fit=crop&crop=faces,center";
 
-const calculateImageSection = (index: number) => {
-  const row = Math.floor(index / PUZZLE_SIZE);
-  const col = index % PUZZLE_SIZE;
-  return {
-    backgroundImage: `url(${CAT_IMAGE})`,
-    backgroundSize: `${PIECE_SIZE * PUZZLE_SIZE}px ${PIECE_SIZE * PUZZLE_SIZE}px`,
-    backgroundPosition: `-${col * PIECE_SIZE}px -${row * PIECE_SIZE}px`,
-  };
-};
-
-const initialPieces: PuzzlePieceType[] = Array.from({ length: PUZZLE_SIZE * PUZZLE_SIZE }, (_, i) => {
-  const correctX = (i % PUZZLE_SIZE) * PIECE_SIZE;
-  const correctY = Math.floor(i / PUZZLE_SIZE) * PIECE_SIZE;
-  
-  const angle = (i / (PUZZLE_SIZE * PUZZLE_SIZE)) * Math.PI * 2;
-  const radius = 300;
-  const scatterX = Math.cos(angle) * radius;
-  const scatterY = Math.sin(angle) * radius;
-  
-  return {
-    id: i,
-    rotation: Math.floor(Math.random() * 4) * 90,
-    position: {
-      x: correctX + scatterX,
-      y: correctY + scatterY,
-    },
-    imageStyles: calculateImageSection(i),
-    correctPosition: {
-      x: correctX,
-      y: correctY,
-    },
-    correctRotation: 0,
-  };
-});
-
-const triggerCelebration = () => {
-  // Initial burst
-  confetti({
-    particleCount: 100,
-    spread: 70,
-    origin: { y: 0.6 }
-  });
-
-  // Side cannons
-  setTimeout(() => {
-    confetti({
-      particleCount: 50,
-      angle: 60,
-      spread: 55,
-      origin: { x: 0 }
-    });
-    confetti({
-      particleCount: 50,
-      angle: 120,
-      spread: 55,
-      origin: { x: 1 }
-    });
-  }, 250);
-
-  // Delayed bursts
-  setTimeout(() => {
-    confetti({
-      particleCount: 100,
-      spread: 100,
-      origin: { y: 0.6 }
-    });
-  }, 500);
-
-  // Rain effect
-  setTimeout(() => {
-    const end = Date.now() + 1000;
-    const colors = ['#ff0000', '#ffd700', '#00ff00', '#0000ff', '#ff69b4'];
-
-    (function frame() {
-      confetti({
-        particleCount: 2,
-        angle: 60,
-        spread: 55,
-        origin: { x: 0 },
-        colors: colors
-      });
-      confetti({
-        particleCount: 2,
-        angle: 120,
-        spread: 55,
-        origin: { x: 1 },
-        colors: colors
-      });
-
-      if (Date.now() < end) {
-        requestAnimationFrame(frame);
-      }
-    }());
-  }, 750);
+const calculatePieceSize = () => {
+  if (typeof window === 'undefined') return DESKTOP_PIECE_SIZE;
+  return window.innerWidth < MOBILE_BREAKPOINT ? MOBILE_PIECE_SIZE : DESKTOP_PIECE_SIZE;
 };
 
 export default function GameBoard() {
+  const [pieceSize, setPieceSize] = useState(calculatePieceSize());
+  const [boardHeight, setBoardHeight] = useState(600);
+
+  const calculateImageSection = (index: number) => {
+    const row = Math.floor(index / PUZZLE_SIZE);
+    const col = index % PUZZLE_SIZE;
+    return {
+      backgroundImage: `url(${CAT_IMAGE})`,
+      backgroundSize: `${pieceSize * PUZZLE_SIZE}px ${pieceSize * PUZZLE_SIZE}px`,
+      backgroundPosition: `-${col * pieceSize}px -${row * pieceSize}px`,
+    };
+  };
+
+  const createInitialPieces = (size: number): PuzzlePieceType[] => {
+    return Array.from({ length: PUZZLE_SIZE * PUZZLE_SIZE }, (_, i) => {
+      const correctX = (i % PUZZLE_SIZE) * size;
+      const correctY = Math.floor(i / PUZZLE_SIZE) * size;
+      
+      const angle = (i / (PUZZLE_SIZE * PUZZLE_SIZE)) * Math.PI * 2;
+      const radius = size * 2;
+      const scatterX = Math.cos(angle) * radius;
+      const scatterY = Math.sin(angle) * radius;
+      
+      return {
+        id: i,
+        rotation: Math.floor(Math.random() * 4) * 90,
+        position: {
+          x: correctX + scatterX,
+          y: correctY + scatterY,
+        },
+        imageStyles: calculateImageSection(i),
+        correctPosition: {
+          x: correctX,
+          y: correctY,
+        },
+        correctRotation: 0,
+      };
+    });
+  };
+
   const boardRef = useRef<HTMLDivElement>(null);
-  const [pieces, setPieces] = useState<PuzzlePieceType[]>(initialPieces);
+  const [pieces, setPieces] = useState<PuzzlePieceType[]>(() => createInitialPieces(pieceSize));
   const [gameState, setGameState] = useState<GameState>({
     timeElapsed: 0,
     hintsRemaining: 3,
@@ -127,14 +79,17 @@ export default function GameBoard() {
   const [difficulty, setDifficulty] = useState<Difficulty>('medium');
   const [showFinishButton, setShowFinishButton] = useState(true);
 
-  const getPuzzleSize = (difficulty: Difficulty) => {
-    switch (difficulty) {
-      case 'easy': return 2;
-      case 'medium': return 3;
-      case 'hard': return 4;
-      default: return 3;
-    }
-  };
+  useEffect(() => {
+    const handleResize = () => {
+      const isMobile = window.innerWidth < MOBILE_BREAKPOINT;
+      setPieceSize(isMobile ? MOBILE_PIECE_SIZE : DESKTOP_PIECE_SIZE);
+      setBoardHeight(isMobile ? BOARD_HEIGHT_MOBILE : 600);
+    };
+
+    handleResize(); // Call once on mount
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -282,10 +237,10 @@ export default function GameBoard() {
 
   const isPieceInCorrectArea = (piece: PuzzlePieceType) => {
     // Make the threshold much more lenient - allowing for bigger gaps
-    const FINISH_THRESHOLD = PIECE_SIZE * 0.8; // 80% of piece size tolerance
+    const FINISH_THRESHOLD = pieceSize * 0.8; // 80% of piece size tolerance
     
-    const correctCol = Math.floor(piece.correctPosition.x / PIECE_SIZE);
-    const correctRow = Math.floor(piece.correctPosition.y / PIECE_SIZE);
+    const correctCol = Math.floor(piece.correctPosition.x / pieceSize);
+    const correctRow = Math.floor(piece.correctPosition.y / pieceSize);
     
     const pieceX = piece.position.x;
     const pieceY = piece.position.y;
@@ -330,7 +285,7 @@ export default function GameBoard() {
   };
 
   const resetGame = () => {
-    setPieces([...initialPieces]); // Create a new array to trigger re-render
+    setPieces(createInitialPieces(pieceSize));
     setGameState({
       timeElapsed: 0,
       hintsRemaining: 3,
@@ -343,11 +298,72 @@ export default function GameBoard() {
     setShowControls(false);
   };
 
+  const triggerCelebration = () => {
+    // Initial burst
+    confetti({
+      particleCount: 100,
+      spread: 70,
+      origin: { y: 0.6 }
+    });
+
+    // Side cannons
+    setTimeout(() => {
+      confetti({
+        particleCount: 50,
+        angle: 60,
+        spread: 55,
+        origin: { x: 0 }
+      });
+      confetti({
+        particleCount: 50,
+        angle: 120,
+        spread: 55,
+        origin: { x: 1 }
+      });
+    }, 250);
+
+    // Delayed bursts
+    setTimeout(() => {
+      confetti({
+        particleCount: 100,
+        spread: 100,
+        origin: { y: 0.6 }
+      });
+    }, 500);
+
+    // Rain effect
+    setTimeout(() => {
+      const end = Date.now() + 1000;
+      const colors = ['#ff0000', '#ffd700', '#00ff00', '#0000ff', '#ff69b4'];
+
+      (function frame() {
+        confetti({
+          particleCount: 2,
+          angle: 60,
+          spread: 55,
+          origin: { x: 0 },
+          colors: colors
+        });
+        confetti({
+          particleCount: 2,
+          angle: 120,
+          spread: 55,
+          origin: { x: 1 },
+          colors: colors
+        });
+
+        if (Date.now() < end) {
+          requestAnimationFrame(frame);
+        }
+      }());
+    }, 750);
+  };
+
   return (
     <motion.div 
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="min-h-screen bg-gradient-to-br from-yellow-900/5 to-yellow-600/10 p-8"
+      className="min-h-screen bg-gradient-to-br from-yellow-900/5 to-yellow-600/10 p-2 sm:p-8"
     >
       <motion.div 
         initial={{ y: -20 }}
@@ -357,28 +373,28 @@ export default function GameBoard() {
         <motion.div 
           initial={{ y: -20 }}
           animate={{ y: 0 }}
-          className="flex justify-between items-center mb-8"
+          className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-4 sm:mb-8"
         >
           <motion.div 
             className="flex items-center space-x-4"
             whileHover={{ scale: 1.05 }}
           >
-            <Cat className="w-8 h-8 text-yellow-500" />
-            <h1 className="text-3xl font-bold text-yellow-500">Shadow Cat</h1>
+            <Cat className="w-6 h-6 sm:w-8 sm:h-8 text-yellow-500" />
+            <h1 className="text-2xl sm:text-3xl font-bold text-yellow-500">Shadow Cat</h1>
           </motion.div>
-          <div className="flex items-center space-x-6">
+          <div className="flex items-center space-x-4 sm:space-x-6">
             <motion.div 
               className="flex items-center space-x-2"
               whileHover={{ scale: 1.05 }}
             >
-              <Clock className="w-5 h-5 text-yellow-500" />
+              <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-500" />
               <Timer seconds={gameState.timeElapsed} />
             </motion.div>
             <motion.div 
               className="flex items-center space-x-2"
               whileHover={{ scale: 1.05 }}
             >
-              <Trophy className="w-5 h-5 text-yellow-500" />
+              <Trophy className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-500" />
               <span className="font-semibold">{gameState.score}</span>
             </motion.div>
           </div>
@@ -389,13 +405,14 @@ export default function GameBoard() {
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ duration: 0.5 }}
-          className="relative w-full h-[600px] bg-black/90 rounded-xl shadow-2xl overflow-hidden border border-yellow-500/20"
+          className="relative w-full bg-black/90 rounded-xl shadow-2xl overflow-hidden border border-yellow-500/20"
+          style={{ height: `${boardHeight}px` }}
         >
           <motion.div 
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.5 }}
-            className="absolute top-4 right-4 w-[150px] h-[150px] rounded-lg overflow-hidden shadow-lg border-2 border-yellow-500/20"
+            className="absolute top-4 right-4 w-[100px] h-[100px] sm:w-[150px] sm:h-[150px] rounded-lg overflow-hidden shadow-lg border-2 border-yellow-500/20"
           >
             <img 
               src={CAT_IMAGE} 
@@ -413,8 +430,8 @@ export default function GameBoard() {
                 onDragEnd={handleDragEnd}
                 isActive={selectedPiece === piece.id}
                 isCorrect={correctPieces.has(piece.id)}
-                size={PIECE_SIZE}
-                boardSize={PIECE_SIZE * PUZZLE_SIZE}
+                size={pieceSize}
+                boardSize={pieceSize * PUZZLE_SIZE}
                 onClick={() => handlePieceClick(piece.id)}
               />
             ))}
@@ -432,7 +449,7 @@ export default function GameBoard() {
                 <motion.div
                   initial={{ y: 50 }}
                   animate={{ y: 0 }}
-                  className="relative bg-black/90 p-8 rounded-2xl shadow-2xl text-center border border-yellow-500/20"
+                  className="relative bg-black/90 p-4 sm:p-8 rounded-2xl shadow-2xl text-center border border-yellow-500/20 mx-4"
                 >
                   <motion.div
                     animate={{
@@ -445,7 +462,7 @@ export default function GameBoard() {
                       repeatType: "reverse"
                     }}
                   >
-                    <h2 className="text-4xl font-bold mb-4 text-yellow-500">
+                    <h2 className="text-2xl sm:text-4xl font-bold mb-4 text-yellow-500">
                       🎉 Puzzle Complete! 🎊
                     </h2>
                   </motion.div>
@@ -513,27 +530,27 @@ export default function GameBoard() {
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.7 }}
-          className="mt-6 flex justify-between items-center"
+          className="mt-6 flex flex-col sm:flex-row justify-between items-center gap-4"
         >
-          <div className="flex gap-4">
+          <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={useHint}
               disabled={gameState.hintsRemaining === 0}
-              className={`px-6 py-3 rounded-lg font-semibold transition-all
+              className={`px-4 sm:px-6 py-2 sm:py-3 rounded-lg font-semibold transition-all w-full sm:w-auto
                 ${gameState.hintsRemaining > 0
                   ? 'bg-yellow-500 text-black hover:bg-yellow-400'
                   : 'bg-gray-800 text-gray-600 cursor-not-allowed'
                 }`}
             >
-              Use Hint ({gameState.hintsRemaining} remaining)
+              Use Hint ({gameState.hintsRemaining})
             </motion.button>
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={() => setShowControls(true)}
-              className="px-6 py-3 rounded-lg font-semibold bg-gray-800 text-yellow-500 hover:bg-gray-700"
+              className="px-4 sm:px-6 py-2 sm:py-3 rounded-lg font-semibold bg-gray-800 text-yellow-500 hover:bg-gray-700 w-full sm:w-auto"
             >
               How to Play
             </motion.button>
@@ -543,9 +560,9 @@ export default function GameBoard() {
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={handleFinish}
-            className="px-8 py-4 rounded-lg font-bold bg-gradient-to-r from-green-500 to-emerald-600 
+            className="px-6 sm:px-8 py-3 sm:py-4 rounded-lg font-bold bg-gradient-to-r from-green-500 to-emerald-600 
               text-white hover:from-green-600 hover:to-emerald-700 shadow-lg 
-              transition-all transform hover:shadow-xl"
+              transition-all transform hover:shadow-xl w-full sm:w-auto"
           >
             ✨ Check Puzzle ✨
           </motion.button>
@@ -563,7 +580,7 @@ export default function GameBoard() {
             <motion.div
               initial={{ y: 50 }}
               animate={{ y: 0 }}
-              className="relative bg-black/90 p-8 rounded-2xl shadow-2xl text-left border border-yellow-500/20 max-w-lg"
+              className="relative bg-black/90 p-4 sm:p-8 rounded-2xl shadow-2xl text-left border border-yellow-500/20 max-w-lg mx-4 max-h-[90vh] overflow-y-auto"
             >
               <h2 className="text-2xl font-bold mb-6 text-yellow-500 text-center">How to Play Shadow Cat</h2>
               
