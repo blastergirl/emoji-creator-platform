@@ -5,10 +5,10 @@ import Timer from './Timer';
 import { Cat, Clock, Trophy } from 'lucide-react';
 import type { PuzzlePiece as PuzzlePieceType, GameState } from '../types';
 import confetti from 'canvas-confetti';
+import { levels, type LevelConfig } from '../config/levels';
 
 type Difficulty = 'easy' | 'medium' | 'hard';
 
-const PUZZLE_SIZE = 3;
 const MOBILE_BREAKPOINT = 768; // pixels
 const DESKTOP_PIECE_SIZE = 150;
 const MOBILE_PIECE_SIZE = 80; // Smaller pieces for mobile
@@ -22,26 +22,112 @@ const calculatePieceSize = () => {
   return window.innerWidth < MOBILE_BREAKPOINT ? MOBILE_PIECE_SIZE : DESKTOP_PIECE_SIZE;
 };
 
+// Move LevelSelectModal outside of GameBoard and memoize it
+const LevelSelectModal = React.memo(({ 
+  onClose, 
+  onSelectLevel, 
+  currentLevel, 
+  loadedImages 
+}: { 
+  onClose: () => void;
+  onSelectLevel: (level: LevelConfig) => void;
+  currentLevel: LevelConfig;
+  loadedImages: Set<string>;
+}) => (
+  <motion.div
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1 }}
+    exit={{ opacity: 0 }}
+    transition={{ duration: 0.2 }}
+    className="fixed inset-0 flex items-center justify-center z-50"
+  >
+    <motion.div 
+      className="absolute inset-0 bg-black/75 backdrop-blur-sm"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={onClose}
+    />
+    <motion.div
+      initial={{ y: 20, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      exit={{ y: 20, opacity: 0 }}
+      transition={{ 
+        type: "spring",
+        stiffness: 300,
+        damping: 30
+      }}
+      className="relative bg-black/90 p-6 rounded-2xl shadow-2xl border border-yellow-500/20 max-w-3xl mx-4 max-h-[90vh] overflow-y-auto"
+    >
+      <h2 className="text-2xl font-bold mb-6 text-yellow-500 text-center">Select Level</h2>
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+        {levels.map((level) => (
+          <motion.button
+            key={level.id}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => onSelectLevel(level)}
+            className={`relative p-2 rounded-lg border-2 transition-all
+              ${currentLevel.id === level.id 
+                ? 'border-yellow-500' 
+                : 'border-yellow-500/20 hover:border-yellow-500/50'}`}
+          >
+            <div className="relative aspect-square bg-black/50">
+              {loadedImages.has(level.image) && (
+                <img 
+                  src={level.image} 
+                  alt={level.name}
+                  className="w-full h-full object-cover rounded"
+                  draggable="false"
+                />
+              )}
+              <motion.div
+                className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent pointer-events-none"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.3 }}
+              />
+            </div>
+            <div className="mt-2 text-yellow-500 font-semibold">{level.name}</div>
+            <div className={`text-sm ${
+              level.difficulty === 'easy' ? 'text-green-500' :
+              level.difficulty === 'medium' ? 'text-yellow-500' :
+              'text-red-500'
+            }`}>
+              {level.difficulty.charAt(0).toUpperCase() + level.difficulty.slice(1)}
+              {` (${level.gridSize}x${level.gridSize})`}
+            </div>
+          </motion.button>
+        ))}
+      </div>
+    </motion.div>
+  </motion.div>
+));
+
 export default function GameBoard() {
+  const [loadedImages, setLoadedImages] = useState<Set<string>>(new Set());
   const [pieceSize, setPieceSize] = useState(calculatePieceSize());
   const [boardHeight, setBoardHeight] = useState(600);
 
-  const calculateImageSection = (index: number) => {
-    const row = Math.floor(index / PUZZLE_SIZE);
-    const col = index % PUZZLE_SIZE;
+  const [currentLevel, setCurrentLevel] = useState<LevelConfig>(levels[0]);
+  const [showLevelSelect, setShowLevelSelect] = useState(false);
+
+  const calculateImageSection = (index: number, level = currentLevel) => {
+    const row = Math.floor(index / level.gridSize);
+    const col = index % level.gridSize;
     return {
-      backgroundImage: `url(${CAT_IMAGE})`,
-      backgroundSize: `${pieceSize * PUZZLE_SIZE}px ${pieceSize * PUZZLE_SIZE}px`,
+      backgroundImage: `url(${level.image})`,
+      backgroundSize: `${pieceSize * level.gridSize}px ${pieceSize * level.gridSize}px`,
       backgroundPosition: `-${col * pieceSize}px -${row * pieceSize}px`,
     };
   };
 
-  const createInitialPieces = (size: number): PuzzlePieceType[] => {
-    return Array.from({ length: PUZZLE_SIZE * PUZZLE_SIZE }, (_, i) => {
-      const correctX = (i % PUZZLE_SIZE) * size;
-      const correctY = Math.floor(i / PUZZLE_SIZE) * size;
+  const createInitialPieces = (size: number, level = currentLevel): PuzzlePieceType[] => {
+    return Array.from({ length: level.gridSize * level.gridSize }, (_, i) => {
+      const correctX = (i % level.gridSize) * size;
+      const correctY = Math.floor(i / level.gridSize) * size;
       
-      const angle = (i / (PUZZLE_SIZE * PUZZLE_SIZE)) * Math.PI * 2;
+      const angle = (i / (level.gridSize * level.gridSize)) * Math.PI * 2;
       const radius = size * 2;
       const scatterX = Math.cos(angle) * radius;
       const scatterY = Math.sin(angle) * radius;
@@ -53,12 +139,13 @@ export default function GameBoard() {
           x: correctX + scatterX,
           y: correctY + scatterY,
         },
-        imageStyles: calculateImageSection(i),
+        imageStyles: calculateImageSection(i, level),
         correctPosition: {
           x: correctX,
           y: correctY,
         },
         correctRotation: 0,
+        opacity: 1,
       };
     });
   };
@@ -78,6 +165,7 @@ export default function GameBoard() {
   const [showControls, setShowControls] = useState(false);
   const [difficulty, setDifficulty] = useState<Difficulty>('medium');
   const [showFinishButton, setShowFinishButton] = useState(true);
+  const [hintPieceId, setHintPieceId] = useState<number | null>(null);
 
   useEffect(() => {
     const handleResize = () => {
@@ -132,6 +220,10 @@ export default function GameBoard() {
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, [selectedPiece]);
+
+  useEffect(() => {
+    preloadImages();
+  }, []);
 
   const isPieceCorrect = (piece: PuzzlePieceType) => {
     const positionCorrect = Math.abs(piece.position.x - piece.correctPosition.x) < SNAP_THRESHOLD &&
@@ -202,13 +294,14 @@ export default function GameBoard() {
       
       if (unsolvedPieces.length > 0) {
         const randomPiece = unsolvedPieces[Math.floor(Math.random() * unsolvedPieces.length)];
-        setPieces(prev => prev.map(p =>
-          p.id === randomPiece.id
-            ? { ...p, position: p.correctPosition, rotation: p.correctRotation }
-            : p
-        ));
+        
+        setHintPieceId(randomPiece.id);
+        
+        setTimeout(() => {
+          setHintPieceId(null);
+        }, 3000);
+        
         setGameState(prev => ({ ...prev, hintsRemaining: prev.hintsRemaining - 1 }));
-        checkCompletion();
       }
     }
   };
@@ -347,6 +440,72 @@ export default function GameBoard() {
     }, 750);
   };
 
+  // Update the handleLevelChange function
+  const handleLevelChange = (newLevel: LevelConfig) => {
+    console.log('handleLevelChange called with level:', newLevel.id);
+    
+    if (newLevel.id === currentLevel.id) {
+      console.log('Same level selected, closing modal');
+      setShowLevelSelect(false);
+      return;
+    }
+
+    console.log('Updating to new level:', newLevel.id);
+    setCurrentLevel(newLevel);
+    
+    console.log('Fading out pieces');
+    setPieces(prev => prev.map(piece => ({
+      ...piece,
+      opacity: 0
+    })));
+
+    setTimeout(() => {
+      console.log('Creating new pieces for level:', newLevel.id);
+      const newPieces = createInitialPieces(pieceSize, newLevel);
+      setPieces(newPieces);
+      setGameState({
+        timeElapsed: 0,
+        hintsRemaining: 3,
+        isComplete: false,
+        score: 0,
+      });
+      setCorrectPieces(new Set());
+      setShowCelebration(false);
+      setSelectedPiece(null);
+      setShowControls(false);
+      setShowLevelSelect(false);
+    }, 300);
+  };
+
+  const goToNextLevel = () => {
+    const currentIndex = levels.findIndex(level => level.id === currentLevel.id);
+    let nextIndex = (currentIndex + 1) % levels.length;
+    while (levels[nextIndex].image === currentLevel.image && nextIndex !== currentIndex) {
+      nextIndex = (nextIndex + 1) % levels.length;
+    }
+    handleLevelChange(levels[nextIndex]);
+  };
+
+  const preloadImages = () => {
+    console.log('Starting image preload');
+    const loadImage = (src: string) => {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+          console.log('Image loaded:', src);
+          setLoadedImages(prev => new Set([...prev, src]));
+          resolve(src);
+        };
+        img.onerror = reject;
+        img.src = src;
+      });
+    };
+
+    Promise.all(levels.map(level => loadImage(level.image)))
+      .then(() => console.log('All images preloaded'))
+      .catch(error => console.error('Error preloading images:', error));
+  };
+
   return (
     <motion.div 
       initial={{ opacity: 0 }}
@@ -363,14 +522,15 @@ export default function GameBoard() {
           animate={{ y: 0 }}
           className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-4 sm:mb-8"
         >
-          <motion.div 
-            className="flex items-center space-x-4"
-            whileHover={{ scale: 1.05 }}
-          >
-            <Cat className="w-6 h-6 sm:w-8 sm:h-8 text-yellow-500" />
-            <h1 className="text-2xl sm:text-3xl font-bold text-yellow-500">Shadow Cat</h1>
-          </motion.div>
           <div className="flex items-center space-x-4 sm:space-x-6">
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setShowLevelSelect(true)}
+              className="px-4 py-2 bg-yellow-500/20 text-yellow-500 rounded-lg hover:bg-yellow-500/30 transition-all"
+            >
+              Select Level
+            </motion.button>
             <motion.div 
               className="flex items-center space-x-2"
               whileHover={{ scale: 1.05 }}
@@ -402,10 +562,14 @@ export default function GameBoard() {
             transition={{ delay: 0.5 }}
             className="absolute top-4 right-4 w-[100px] h-[100px] sm:w-[150px] sm:h-[150px] rounded-lg overflow-hidden shadow-lg border-2 border-yellow-500/20"
           >
-            <img 
-              src={CAT_IMAGE} 
+            <motion.img 
+              key={currentLevel.image}
+              src={currentLevel.image}
               alt="Complete puzzle preview"
               className="w-full h-full object-cover"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.3 }}
             />
           </motion.div>
 
@@ -418,8 +582,9 @@ export default function GameBoard() {
                 onDragEnd={handleDragEnd}
                 isActive={selectedPiece === piece.id}
                 isCorrect={correctPieces.has(piece.id)}
+                isHinted={hintPieceId === piece.id}
                 size={pieceSize}
-                boardSize={pieceSize * PUZZLE_SIZE}
+                boardSize={pieceSize * currentLevel.gridSize}
                 onClick={() => handlePieceClick(piece.id)}
                 isDraggable={!correctPieces.has(piece.id)}
               />
@@ -464,31 +629,28 @@ export default function GameBoard() {
                       repeat: Infinity,
                       repeatType: "reverse"
                     }}
-                    className="text-2xl text-yellow-400 mb-8"
+                    className="text-xl sm:text-2xl text-yellow-400 mb-6"
                   >
                     🏆 Score: {gameState.score} 🏆
                   </motion.p>
-                  <motion.div
-                    className="mt-4 text-3xl mb-8"
-                    animate={{
-                      scale: [1, 1.1, 1],
-                    }}
-                    transition={{
-                      duration: 0.5,
-                      repeat: Infinity,
-                      repeatType: "reverse"
-                    }}
-                  >
-                    🎈 🎨 🎯 🌟
-                  </motion.div>
-                  <motion.button
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={resetGame}
-                    className="px-6 py-3 bg-green-500 text-white rounded-lg font-bold hover:bg-green-600 transition-all shadow-lg"
-                  >
-                    🎮 Play Again
-                  </motion.button>
+                  <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={resetGame}
+                      className="px-6 py-3 bg-yellow-500 text-black rounded-lg font-bold hover:bg-yellow-400 transition-all shadow-lg"
+                    >
+                      🔄 Try Again
+                    </motion.button>
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={goToNextLevel}
+                      className="px-6 py-3 bg-green-500 text-white rounded-lg font-bold hover:bg-green-600 transition-all shadow-lg"
+                    >
+                      Next Level ➡️
+                    </motion.button>
+                  </div>
                 </motion.div>
               </motion.div>
             )}
@@ -618,6 +780,16 @@ export default function GameBoard() {
               </div>
             </motion.div>
           </motion.div>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {showLevelSelect && (
+          <LevelSelectModal
+            onClose={() => setShowLevelSelect(false)}
+            onSelectLevel={handleLevelChange}
+            currentLevel={currentLevel}
+            loadedImages={loadedImages}
+          />
         )}
       </AnimatePresence>
     </motion.div>
